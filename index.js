@@ -20,6 +20,9 @@ let sock;
 let startTime = Date.now();
 const rateLimit = new Map(); // Rate limit: max 5 msg/min par user
 const connectedUsers = new Set(); // Track des users connectés
+let reconnectAttempts = 0;
+const maxReconnectAttempts = 5;
+const reconnectDelay = 5000; // 5 secondes
 
 // Fonction de log avancée
 function log(message, type = 'info') {
@@ -36,7 +39,7 @@ function formatUptime(uptime) {
   return `${days}d ${hours}h ${minutes}m ${seconds}s`;
 }
 
-// Config bot avec plus de features
+// Config bot avec reconnexion robuste
 async function connectToWhatsApp(phoneNumber = null) {
   const { state, saveCreds } = await useMultiFileAuthState('./auth_info');
   sock = makeWASocket({
@@ -49,10 +52,18 @@ async function connectToWhatsApp(phoneNumber = null) {
   sock.ev.on('connection.update', async (update) => {
     const { connection, lastDisconnect } = update;
     if (connection === 'close') {
-      const shouldReconnect = (lastDisconnect?.error)?.output?.statusCode !== DisconnectReason.loggedOut;
-      log('Connexion perdue, reconnexion...', 'error');
-      if (shouldReconnect) connectToWhatsApp();
+      const statusCode = (lastDisconnect?.error)?.output?.statusCode;
+      const shouldReconnect = statusCode !== DisconnectReason.loggedOut && reconnectAttempts < maxReconnectAttempts;
+      log(`Connexion perdue (code: ${statusCode}), reconnexion ${shouldReconnect ? 'oui' : 'non'}...`, 'error');
+      if (shouldReconnect) {
+        reconnectAttempts++;
+        setTimeout(() => connectToWhatsApp(), reconnectDelay * reconnectAttempts); // Backoff exponentiel
+      } else {
+        log('Trop de tentatives ou logout, arrêt reconnexion.', 'error');
+        reconnectAttempts = 0; // Reset pour futur
+      }
     } else if (connection === 'open') {
+      reconnectAttempts = 0;
       log('Connecté à WhatsApp ! Bot prêt.', 'success');
       io.emit('status', { connected: true, users: connectedUsers.size });
     }
@@ -194,45 +205,58 @@ async function connectToWhatsApp(phoneNumber = null) {
   return pairingCode;
 }
 
-// Styles CSS wow animés améliorés
-const cssStyles = `
-  body { font-family: 'Arial', sans-serif; background: linear-gradient(to bottom, #1e3c72, #2a5298); color: white; margin: 0; padding: 20px; transition: background 1s; }
-  h1 { text-align: center; animation: fadeIn 1s ease-in-out, glow 2s infinite alternate, rainbow 10s infinite; }
-  form { max-width: 400px; margin: auto; padding: 20px; background: rgba(255,255,255,0.1); border-radius: 10px; box-shadow: 0 0 20px rgba(0,0,0,0.5); animation: slideUp 0.5s ease-out, pulse 2s infinite; }
-  input, button { width: 100%; padding: 10px; margin: 10px 0; border: none; border-radius: 5px; transition: all 0.3s; }
-  button { background: linear-gradient(to right, #4CAF50, #2196F3); color: white; cursor: pointer; }
-  button:hover { transform: scale(1.05); box-shadow: 0 0 15px #fff; }
-  #status { color: #FFD700; animation: blink 1s infinite; }
-  #logs { background: rgba(0,0,0,0.3); border-radius: 10px; padding: 10px; }
-  .log-info { color: #fff; }
-  .log-success { color: #4CAF50; animation: bounceIn 0.5s; }
-  .log-error { color: #F44336; animation: shake 0.5s; }
-  .log-warning { color: #FFEB3B; }
-  .log-message { color: #2196F3; }
-  .log-response { color: #9C27B0; }
-  .log-admin { color: #FF5722; }
-  .log-access { color: #FFC107; }
-  @keyframes fadeIn { from { opacity: 0; transform: translateY(-20px); } to { opacity: 1; transform: translateY(0); } }
-  @keyframes slideUp { from { transform: translateY(50px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
-  @keyframes glow { from { text-shadow: 0 0 5px #fff; } to { text-shadow: 0 0 20px #fff, 0 0 30px #4CAF50; } }
-  @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.02); } 100% { transform: scale(1); } }
-  @keyframes rainbow { 0% { color: #f00; } 14% { color: #ff0; } 28% { color: #0f0; } 42% { color: #0ff; } 57% { color: #00f; } 71% { color: #f0f; } 85% { color: #f00; } 100% { color: #f00; } }
-  @keyframes blink { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
-  @keyframes bounceIn { from { transform: scale(0.5); opacity: 0; } to { transform: scale(1); opacity: 1; } }
-  @keyframes shake { 0%, 100% { transform: translateX(0); } 10%, 30%, 50%, 70%, 90% { transform: translateX(-5px); } 20%, 40%, 60%, 80% { transform: translateX(5px); } }
+// Styles CSS pro et wow (avec Bootstrap pour look professionnel)
+const htmlHeader = `
+<head>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body { background: linear-gradient(135deg, #0f2027, #203a43, #2c5364); color: #fff; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+    .navbar { background: rgba(0,0,0,0.5) !important; }
+    .card { background: rgba(255,255,255,0.1); border: none; box-shadow: 0 4px 30px rgba(0,0,0,0.2); backdrop-filter: blur(5px); }
+    .btn-primary { background: linear-gradient(to right, #4e54c8, #8f94fb); border: none; transition: transform 0.3s; }
+    .btn-primary:hover { transform: scale(1.05); }
+    #logs { height: 500px; overflow-y: auto; background: rgba(0,0,0,0.3); border-radius: 10px; padding: 15px; }
+    .log-entry { animation: fadeIn 0.5s; margin-bottom: 10px; padding: 10px; border-radius: 5px; }
+    .log-info { background: rgba(255,255,255,0.1); }
+    .log-success { background: rgba(76,175,80,0.2); color: #4caf50; animation: bounceIn 0.5s; }
+    .log-error { background: rgba(244,67,54,0.2); color: #f44336; animation: shake 0.5s; }
+    .log-warning { background: rgba(255,235,59,0.2); color: #ffeb3b; }
+    .log-message { background: rgba(33,150,243,0.2); color: #2196f3; }
+    .log-response { background: rgba(156,39,176,0.2); color: #9c27b0; }
+    .log-admin { background: rgba(255,87,34,0.2); color: #ff5722; }
+    .log-access { background: rgba(255,193,7,0.2); color: #ffc107; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    @keyframes bounceIn { from { transform: scale(0.8); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+    @keyframes shake { 0%, 100% { transform: translateX(0); } 10%, 30%, 50% { transform: translateX(-5px); } 20%, 40% { transform: translateX(5px); } }
+  </style>
+</head>
 `;
 
-// Routes avec styles wow
+// Routes avec UI pro (Bootstrap + animations)
 app.get('/', (req, res) => {
   log('Accès dashboard', 'access');
   res.send(`
-    <html>
-      <head><style>${cssStyles}</style></head>
+    <html>${htmlHeader}
       <body>
-        <h1>Dashboard Bot WhatsApp 🚀✨</h1>
-        <p>Status : <span id="status">Vérification...</span> | Users : <span id="users">0</span></p>
-        <a href="/pair" style="display:block; text-align:center; color:#fff;">Pairer un appareil</a> | <a href="/logs" style="display:block; text-align:center; color:#fff;">Logs en live</a>
-        <script src="/socket.io/socket.io.js"></script>
+        <nav class="navbar navbar-expand-lg navbar-dark">
+          <div class="container">
+            <a class="navbar-brand" href="/">WhatsApp Bot Dashboard</a>
+            <div class="collapse navbar-collapse">
+              <ul class="navbar-nav ms-auto">
+                <li class="nav-item"><a class="nav-link" href="/pair">Pairer</a></li>
+                <li class="nav-item"><a class="nav-link" href="/logs">Logs</a></li>
+              </ul>
+            </div>
+          </div>
+        </nav>
+        <div class="container mt-5">
+          <div class="card p-4 text-center">
+            <h1 class="card-title">Status du Bot 🚀</h1>
+            <p>Connexion : <span id="status">Vérification...</span></p>
+            <p>Utilisateurs connectés : <span id="users">0</span></p>
+          </div>
+        </div>
+        <script src="https://cdn.socket.io/4.8.0/socket.io.min.js"></script>
         <script>
           const socket = io();
           socket.on('status', (data) => {
@@ -248,15 +272,31 @@ app.get('/', (req, res) => {
 app.get('/pair', (req, res) => {
   log('Accès pairing', 'access');
   res.send(`
-    <html>
-      <head><style>${cssStyles}</style></head>
+    <html>${htmlHeader}
       <body>
-        <h1>Pairer ton Bot ✨🌟</h1>
-        <form action="/pair" method="post">
-          <label>Numéro (sans +) :</label><br>
-          <input type="text" name="number" placeholder="ex: 24176209643" required><br>
-          <button type="submit">Générer Code 🎉🔥</button>
-        </form>
+        <nav class="navbar navbar-expand-lg navbar-dark">
+          <div class="container">
+            <a class="navbar-brand" href="/">WhatsApp Bot Dashboard</a>
+            <div class="collapse navbar-collapse">
+              <ul class="navbar-nav ms-auto">
+                <li class="nav-item"><a class="nav-link" href="/pair">Pairer</a></li>
+                <li class="nav-item"><a class="nav-link" href="/logs">Logs</a></li>
+              </ul>
+            </div>
+          </div>
+        </nav>
+        <div class="container mt-5">
+          <div class="card p-4">
+            <h1 class="card-title text-center">Pairer ton Bot ✨</h1>
+            <form action="/pair" method="post">
+              <div class="mb-3">
+                <label class="form-label">Numéro (sans +)</label>
+                <input type="text" name="number" class="form-control" placeholder="ex: 24176209643" required>
+              </div>
+              <button type="submit" class="btn btn-primary">Générer Code 🎉</button>
+            </form>
+          </div>
+        </div>
       </body>
     </html>
   `);
@@ -266,43 +306,64 @@ app.post('/pair', async (req, res) => {
   const phoneNumber = req.body.number.trim();
   log(`Pairing pour ${phoneNumber}`, 'info');
   if (!phoneNumber || !/^\d+$/.test(phoneNumber)) {
-    return res.send('<html><head><style>' + cssStyles + '</style></head><body><h1>Numéro invalide ❌😞</h1></body></html>');
+    return res.send(`<html>${htmlHeader}<body><div class="container mt-5"><div class="alert alert-danger">Numéro invalide ❌</div></div></body></html>`);
   }
   try {
     const pairingCode = await connectToWhatsApp(phoneNumber);
     res.send(`
-      <html>
-        <head><style>${cssStyles}</style></head>
+      <html>${htmlHeader}
         <body>
-          <h1>Code Généré 🌟🎊</h1>
-          <p>Code : <strong>${pairingCode}</strong></p>
-          <p>Entre-le dans WhatsApp !</p>
+          <nav class="navbar navbar-expand-lg navbar-dark">
+            <div class="container">
+              <a class="navbar-brand" href="/">WhatsApp Bot Dashboard</a>
+            </div>
+          </nav>
+          <div class="container mt-5">
+            <div class="card p-4 text-center">
+              <h1 class="card-title">Code Généré 🌟</h1>
+              <p class="lead">Code : <strong>${pairingCode}</strong></p>
+              <p>Entre-le dans WhatsApp > Appareils connectés.</p>
+            </div>
+          </div>
         </body>
       </html>
     `);
   } catch (error) {
-    res.send('<html><head><style>' + cssStyles + '</style></head><body><h1>Erreur 😞 Réessaie.</h1></body></html>');
+    res.send(`<html>${htmlHeader}<body><div class="container mt-5"><div class="alert alert-danger">Erreur 😞 Réessaie.</div></div></body></html>`);
   }
 });
 
 app.get('/logs', (req, res) => {
   log('Accès logs', 'access');
   res.send(`
-    <html>
-      <head><style>${cssStyles}</style></head>
+    <html>${htmlHeader}
       <body>
-        <h1>Logs en Temps Réel ⚡🔥</h1>
-        <div id="logs" style="height:400px; overflow-y:scroll;"></div>
-        <script src="/socket.io/socket.io.js"></script>
+        <nav class="navbar navbar-expand-lg navbar-dark">
+          <div class="container">
+            <a class="navbar-brand" href="/">WhatsApp Bot Dashboard</a>
+            <div class="collapse navbar-collapse">
+              <ul class="navbar-nav ms-auto">
+                <li class="nav-item"><a class="nav-link" href="/pair">Pairer</a></li>
+                <li class="nav-item"><a class="nav-link" href="/logs">Logs</a></li>
+              </ul>
+            </div>
+          </div>
+        </nav>
+        <div class="container mt-5">
+          <div class="card p-4">
+            <h1 class="card-title text-center">Logs en Temps Réel ⚡</h1>
+            <div id="logs"></div>
+          </div>
+        </div>
+        <script src="https://cdn.socket.io/4.8.0/socket.io.min.js"></script>
         <script>
           const socket = io();
           socket.on('log', (data) => {
             const logDiv = document.getElementById('logs');
-            const p = document.createElement('p');
-            p.className = 'log-' + data.type;
-            p.innerHTML = '<strong>[' + data.time + '] ' + data.type.toUpperCase() + ':</strong> ' + data.message;
-            p.style.animation = 'fadeIn 0.5s';
-            logDiv.appendChild(p);
+            const div = document.createElement('div');
+            div.className = 'log-entry log-' + data.type;
+            div.innerHTML = '<strong>[' + data.time + '] ' + data.type.toUpperCase() + ':</strong> ' + data.message;
+            logDiv.appendChild(div);
             logDiv.scrollTop = logDiv.scrollHeight;
           });
         </script>
