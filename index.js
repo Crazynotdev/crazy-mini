@@ -300,7 +300,7 @@ app.get('/logs', (req, res) => {
             const logDiv = document.getElementById('logs');
             const p = document.createElement('p');
             p.className = 'log-' + data.type;
-            p.innerHTML = `<strong>[${data.time}] ${data.type.toUpperCase()}:</strong> ${data.message}`;
+            p.innerHTML = '<strong>[' + data.time + '] ' + data.type.toUpperCase() + ':</strong> ' + data.message;
             p.style.animation = 'fadeIn 0.5s';
             logDiv.appendChild(p);
             logDiv.scrollTop = logDiv.scrollHeight;
